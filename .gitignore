@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Virtual environment
+.venv/
+venv/
+
+# Airflow
+airflow.db
+airflow-webserver.pid
+logs/
+
+# MLflow
+mlruns/
+
+# Data
+data/current.csv
+data/train.csv
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

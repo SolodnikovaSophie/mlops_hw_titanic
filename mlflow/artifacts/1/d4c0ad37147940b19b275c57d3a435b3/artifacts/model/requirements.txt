@@ -1,0 +1,2 @@
+mlflow==2.12.1
+pycaret==3.3.2

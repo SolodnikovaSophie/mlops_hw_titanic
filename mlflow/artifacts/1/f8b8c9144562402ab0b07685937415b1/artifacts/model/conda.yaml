@@ -1,0 +1,8 @@
+channels:
+- conda-forge
+dependencies:
+- pip<=24.2
+- pip:
+  - mlflow==2.12.1
+  - pycaret==3.3.2
+name: mlops_hw_titanic_v2-env

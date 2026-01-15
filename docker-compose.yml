@@ -1,0 +1,178 @@
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.12.1
+    container_name: mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlflow:/mlflow
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --serve-artifacts
+      --artifacts-destination file:///mlflow/artifacts
+      --default-artifact-root mlflow-artifacts:/
+
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: airflow-init
+    depends_on:
+      - postgres
+      - mlflow
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "my_shared_secret_key_123"
+
+      # Airflow logging (optional, but keeps logs consistent)
+      AIRFLOW__LOGGING__BASE_LOG_FOLDER: "/opt/airflow/logs"
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "false"
+      AIRFLOW__LOGGING__WORKER_LOG_SERVER_HOST: "airflow-webserver"
+      AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: "8793"
+
+      # Project / MLflow vars
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME}
+      MODEL_NAME: ${MODEL_NAME}
+      TRAIN_PATH: ${TRAIN_PATH}
+      CURRENT_PATH: ${CURRENT_PATH}
+      INCOMING_DIR: ${INCOMING_DIR}
+      DRIFT_THRESHOLD: ${DRIFT_THRESHOLD}
+      AB_SPLIT_B: ${AB_SPLIT_B}
+      AB_LOG_PATH: ${AB_LOG_PATH}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./training:/opt/project/training
+      - ./data:/opt/project/data
+      - ./logs:/opt/airflow/logs
+      - ./mlflow:/mlflow
+    entrypoint: /bin/bash
+    command: >
+      -c "airflow db migrate &&
+          airflow users create
+          --username admin
+          --password admin
+          --firstname Admin
+          --lastname User
+          --role Admin
+          --email admin@example.com || true"
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: airflow-webserver
+    depends_on:
+      - postgres
+      - airflow-init
+      - mlflow
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "my_shared_secret_key_123"
+
+      AIRFLOW__LOGGING__BASE_LOG_FOLDER: "/opt/airflow/logs"
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "false"
+      AIRFLOW__LOGGING__WORKER_LOG_SERVER_HOST: "airflow-webserver"
+      AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: "8793"
+
+      # Project / MLflow vars
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME}
+      MODEL_NAME: ${MODEL_NAME}
+      TRAIN_PATH: ${TRAIN_PATH}
+      CURRENT_PATH: ${CURRENT_PATH}
+      INCOMING_DIR: ${INCOMING_DIR}
+      DRIFT_THRESHOLD: ${DRIFT_THRESHOLD}
+      AB_SPLIT_B: ${AB_SPLIT_B}
+      AB_LOG_PATH: ${AB_LOG_PATH}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./training:/opt/project/training
+      - ./data:/opt/project/data
+      - ./logs:/opt/airflow/logs
+      - ./mlflow:/mlflow
+    ports:
+      - "8080:8080"
+    command: webserver
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: airflow-scheduler
+    depends_on:
+      - postgres
+      - airflow-init
+      - mlflow
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "my_shared_secret_key_123"
+
+      AIRFLOW__LOGGING__BASE_LOG_FOLDER: "/opt/airflow/logs"
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "false"
+      AIRFLOW__LOGGING__WORKER_LOG_SERVER_HOST: "airflow-webserver"
+      AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: "8793"
+
+      # Project / MLflow vars
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME}
+      MODEL_NAME: ${MODEL_NAME}
+      TRAIN_PATH: ${TRAIN_PATH}
+      CURRENT_PATH: ${CURRENT_PATH}
+      INCOMING_DIR: ${INCOMING_DIR}
+      DRIFT_THRESHOLD: ${DRIFT_THRESHOLD}
+      AB_SPLIT_B: ${AB_SPLIT_B}
+      AB_LOG_PATH: ${AB_LOG_PATH}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./training:/opt/project/training
+      - ./data:/opt/project/data
+      - ./logs:/opt/airflow/logs
+      - ./mlflow:/mlflow
+    command: scheduler
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: mlops-api
+    depends_on:
+      - mlflow
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME}
+      MODEL_NAME: ${MODEL_NAME}
+      AB_SPLIT_B: ${AB_SPLIT_B}
+      AB_LOG_PATH: ${AB_LOG_PATH}
+    volumes:
+      - ./app:/opt/app
+      - ./logs:/opt/logs
+    ports:
+      - "8000:8000"
+    command: python /opt/app/app.py  
+
+volumes:
+  pgdata:
+
